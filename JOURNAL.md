@@ -25,7 +25,7 @@ _More days will be added as I progress._
 
 ## Day 2 – Securing My AWS Environment
 
-**Date:** `<fill-today>`  
+**Date:** `23-11-2025`  
 **Focus:** IAM setup, avoiding root usage, securing the account.
 
 ### ✅ What I did
