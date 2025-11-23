@@ -42,3 +42,24 @@ _More days will be added as I progress._
 ### 🧩 Next planned step
 - Create the first Lambda function and set up the basic project skeleton on AWS.
 
+## Day 3 – Created My First Lambda Function
+
+**Date:** 23-11-2025  
+**Focus:** Creating the initial Lambda function for the project.
+
+### ✅ What I did
+- Created my first AWS Lambda function named `taskAutomationHandler`.
+- Chose Python 3.12 as the runtime.
+- Deployed a simple function that returns a JSON response.
+- Successfully tested the function in the AWS console.
+
+### 🤔 What I learned / reinforced
+- How Lambda initializes permissions and execution roles.
+- The basics of deploying and testing serverless functions.
+- Importance of starting small before integrating services like EventBridge or DynamoDB.
+
+### 🧩 Next planned step
+- Create the DynamoDB table for storing tasks.
+- Connect Lambda with DynamoDB in the next step.
+
+
