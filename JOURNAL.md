@@ -22,3 +22,23 @@
 ---
 
 _More days will be added as I progress._
+
+## Day 2 – Securing My AWS Environment
+
+**Date:** `<fill-today>`  
+**Focus:** IAM setup, avoiding root usage, securing the account.
+
+### ✅ What I did
+- Created an `AdminGroup` IAM user group with `AdministratorAccess`.
+- Created an IAM user for daily use instead of logging in as the root account.
+- Enabled MFA (Multi-Factor Authentication) on the root account.
+- Switched to using the IAM user in the `ap-south-1` (Mumbai) region for all future work.
+
+### 🤔 What I learned / reinforced
+- Root accounts should only be used for billing and critical account-level operations.
+- IAM groups make it easier to manage permissions instead of attaching policies to each user.
+- Enabling MFA is a simple but powerful security improvement and is considered a must-have by companies.
+
+### 🧩 Next planned step
+- Create the first Lambda function and set up the basic project skeleton on AWS.
+
