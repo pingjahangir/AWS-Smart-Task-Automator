@@ -309,8 +309,275 @@ I now have a fully working automated task reminder system using:
 
 This is a complete cloud automation workflow built entirely using serverless services.
 
+---
 
+# 📘 journal.md (Day 4 – DynamoDB + Lambda + SNS Integration & Debugging)
 
+## **Day 4 – Advanced Automation Logic + IAM Debugging + SNS Notifications**
 
+Today was the biggest progress day of the project so far.
+I built and debugged a **complete cloud automation pipeline** involving:
 
+* **AWS Lambda**
+* **Amazon DynamoDB**
+* **Amazon SNS**
+* **IAM Roles & Policies**
+* **CloudWatch Logs**
+* **Timezone handling (IST)**
+* **Priority-based sorting**
+* **Due-date filtering**
 
+This took time, multiple errors, troubleshooting, and real-world debugging — but by the end, the entire workflow was working end-to-end.
+
+---
+
+# ✅ **1. Added New Task (task-003) in DynamoDB**
+
+I inserted a new item into DynamoDB:
+
+| Attribute  | Value                       |
+| ---------- | --------------------------- |
+| `userId`   | `pingjahangir`              |
+| `taskId`   | `task-003`                  |
+| `Title`    | *Finish the project*        |
+| `Status`   | `PENDING`                   |
+| `Priority` | `1`                         |
+| `DueDate`  | *today's date (YYYY-MM-DD)* |
+
+All tasks now follow a uniform structure with:
+
+* **Title**
+* **Status**
+* **Priority**
+* **DueDate**
+
+---
+
+# ✅ **2. Implemented New Lambda Logic (Due Dates + Priority)**
+
+I wrote a full Lambda function that:
+
+* Retrieves tasks for the user
+* Converts current time to **Indian Standard Time (IST)**
+* Filters only tasks that are **PENDING**
+* Filters tasks that are **due today**
+* Sorts tasks by **priority**
+* Sends a formatted notification email via SNS
+* Logs detailed debug information into CloudWatch
+
+### **📌 Final Lambda Code (Sensitive Values Hidden)**
+
+```python
+import json
+import os
+import boto3
+from boto3.dynamodb.conditions import Key
+from datetime import datetime, timedelta, timezone
+
+# DynamoDB + SNS Clients
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table("TaskTable")
+sns = boto3.client("sns")
+
+# Environment variable fallback (masked)
+SNS_TOPIC_ARN = os.environ.get(
+    "SNS_TOPIC_ARN",
+    "arn:aws:sns:ap-south-1:****:TaskNotificationsTopic"
+)
+
+def get_today_ist_iso() -> str:
+    """Return today's date in IST as YYYY-MM-DD."""
+    ist_offset = timedelta(hours=5, minutes=30)
+    ist_tz = timezone(ist_offset)
+    return datetime.now(ist_tz).date().isoformat()
+
+def lambda_handler(event, context):
+    user_id = "pingjahangir"  # Hardcoded for prototype
+
+    try:
+        # 1) Fetch tasks
+        resp = table.query(
+            KeyConditionExpression=Key("userId").eq(user_id)
+        )
+        tasks = resp.get("Items", [])
+        print(f"Found {len(tasks)} total task(s) for user {user_id}")
+
+        # 2) Filter due-today pending tasks
+        today_ist = get_today_ist_iso()
+        print(f"Today in IST: {today_ist}")
+
+        pending_due_today = []
+        for t in tasks:
+            status = (t.get("status") or t.get("Status") or "").upper()
+            due = t.get("dueDate") or t.get("DueDate") or ""
+            if status == "PENDING" and due == today_ist:
+                pending_due_today.append(t)
+
+        print(f"Tasks pending & due today (IST): {len(pending_due_today)}")
+
+        # 3) If tasks exist → sort by priority and notify
+        if pending_due_today and SNS_TOPIC_ARN:
+
+            def pri_val(x):
+                try:
+                    return int(x.get("priority") or x.get("Priority") or 999)
+                except:
+                    return 999
+
+            pending_due_today.sort(key=pri_val)
+
+            # Email formatting
+            lines = []
+            for t in pending_due_today:
+                title = t.get("title") or t.get("Title") or "(no title)"
+                due = t.get("dueDate") or t.get("DueDate") or "N/A"
+                status = (t.get("status") or t.get("Status") or "UNKNOWN")
+                task_id = t.get("taskId", "N/A")
+                priority = t.get("priority") or t.get("Priority") or "N/A"
+
+                lines.append(
+                    f"- [{priority}] {title} (ID: {task_id}) | due: {due} | status: {status}"
+                )
+
+            message = (
+                f"Hello {user_id},\n\n"
+                f"You have {len(pending_due_today)} pending task(s) due today:\n\n"
+                + "\n".join(lines) +
+                "\n\n— AWS Smart Task Automator"
+            )
+
+            print("Final notification message:", message)
+
+            publish_resp = sns.publish(
+                TopicArn=SNS_TOPIC_ARN,
+                Subject="Tasks due today — AWS Smart Task Automator",
+                Message=message
+            )
+            print("SNS publish response:", publish_resp)
+
+        else:
+            print("No pending tasks due today OR SNS Topic missing.")
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Task check completed.",
+                "totalTasks": len(tasks),
+                "pendingToday": len(pending_due_today)
+            })
+        }
+
+    except Exception as ex:
+        print("Error in lambda:", str(ex))
+        return {"statusCode": 500, "body": json.dumps({"error": str(ex)})}
+```
+
+---
+
+# ❗ 3. Encountered Major Error: AccessDeniedException
+
+When testing the Lambda, I saw this in CloudWatch:
+
+```
+An error occurred (AccessDeniedException) when calling the Query operation
+```
+
+This meant the Lambda **did not have permission** to query DynamoDB.
+
+This is a **real-world production error** that cloud engineers face often.
+
+---
+
+# 🔧 **4. Debugging the IAM Issue (Professional-Level Fix)**
+
+### Problems Identified:
+
+* Lambda was using a role I initially **did not update**
+* Inline policy was created but **not attached**
+* DynamoDB read access was missing
+
+### Solutions:
+
+✔ Verified the **exact Execution Role** used by Lambda
+✔ Added **AmazonDynamoDBReadOnlyAccess**
+✔ Recreated the **TaskTableReadAccess** inline policy
+✔ Ensured SNS publish permissions
+✔ Attached everything to the correct role
+
+### Inline policy used (masked):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:Scan"
+      ],
+      "Resource": "arn:aws:dynamodb:ap-south-1:****:table/TaskTable"
+    }
+  ]
+}
+```
+
+---
+
+# 📊 5. Validation via CloudWatch Logs
+
+After updating IAM:
+
+* No more `AccessDenied` errors
+* Logs showed correct task counts
+* Logs printed the formatted email body
+* SNS responded with:
+
+```
+SNS publish response: { 'MessageId': 'xxxx', ... }
+```
+
+---
+
+# 📬 6. Final Result — Email Received Successfully
+
+I successfully received the **task notification email** through SNS including:
+
+* Task titles
+* Priorities
+* Due dates
+* Status
+* Sorted order
+
+This confirms the *entire serverless system* is functioning.
+
+---
+
+# 🎉 **Summary of What I Achieved Today**
+
+* Added third task in DynamoDB
+* Built advanced Lambda logic
+* Added due-date + priority filtering
+* Implemented IST timezone
+* Added SNS email notifications
+* Performed real AWS debugging
+* Fixed IAM role mismatches
+* Fixed DynamoDB access errors
+* Verified with CloudWatch log streams
+* Successfully received email notifications
+
+This is now a **production-grade serverless automation pipeline**.
+
+---
+
+# 🚀 Next Steps (Upcoming)
+
+* REST API using API Gateway
+* Frontend UI in S3
+* Overdue task detection
+* Multi-user support
+* CloudWatch Alarms
+* Rich HTML email formatting
+
+---
